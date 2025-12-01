@@ -128,3 +128,22 @@ class CatalogoHashTagViewSet(viewsets.ModelViewSet):
         hashtags_activos = CatalogoHashTag.objects.filter(activo=True).order_by('descripcion')
         serializer = CatalogoHashTagListSerializer(hashtags_activos, many=True)
         return ok_response(data=serializer.data)
+
+    @action(detail=False, methods=['get'])
+    def autocomplete(self, request):
+        """Autocompletado de hashtags mientras el usuario escribe.
+        Busca hashtags activos cuya descripción contenga el texto query.
+        Uso: GET /api/v1/catalogos/hashtags/autocomplete/?q=texto
+        """
+        query = request.query_params.get('q', '').strip()
+        if not query:
+            return ok_response(data=[])
+        
+        # Buscar hashtags activos que contengan el query en la descripción
+        hashtags = CatalogoHashTag.objects.filter(
+            activo=True,
+            descripcion__icontains=query
+        ).order_by('descripcion')[:10]  # Limitar a 10 resultados
+        
+        serializer = CatalogoHashTagListSerializer(hashtags, many=True)
+        return ok_response(data=serializer.data)

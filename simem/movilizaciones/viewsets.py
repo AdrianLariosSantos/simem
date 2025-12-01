@@ -27,6 +27,10 @@ from helpers.responses import (
     no_content_response,
 )
 from helpers.errors import error
+from django.core.files.storage import default_storage
+from django.utils.text import get_valid_filename
+from uuid import uuid4
+import os
 
 
 class ExpedientesViewSet(viewsets.ModelViewSet):
@@ -233,9 +237,64 @@ class RegistroViewSet(viewsets.ModelViewSet):
         instance.save()
         return ok_response(data=None, message='Registro desactivado correctamente')
 
+    @action(detail=True, methods=['post'], url_path='upload-foto')
+    @transaction.atomic
+    def upload_foto(self, request, pk=None):
+        """
+        Sube una imagen para el registro y guarda el archivo en el servidor.
+        Reglas:
+        - Máximo 12MB
+        - Sólo tipos de contenido de imagen
+        - Carpeta: expedientes/<expediente_id>/registros/<registro_id>/
+        Devuelve la URL absoluta en `url_foto`.
+        """
+        registro = self.get_object()
+        if not registro:
+            raise NotFound()
+
+        file = request.FILES.get('file') or request.FILES.get('foto') or request.FILES.get('image')
+        if not file:
+            raise BadRequest({'file': 'Archivo de imagen requerido (clave: file|foto|image).'})
+
+        # Validación de tamaño (12 MB)
+        max_size = 12 * 1024 * 1024  # 12MB
+        if file.size > max_size:
+            raise BadRequest({'file': 'El archivo excede el límite de 12MB.'})
+
+        # Validación de tipo simple
+        content_type = getattr(file, 'content_type', '') or ''
+        if not content_type.startswith('image/'):
+            raise BadRequest({'file': 'Sólo se permiten archivos de imagen.'})
+
+        # Construcción de ruta: expedientes/<expediente_id>/registros/<registro_id>/<uuid>.<ext>
+        expediente_id = registro.expedientes_id_id
+        base_dir = os.path.join('expedientes', str(expediente_id), 'registros', str(registro.id))
+        original_name = get_valid_filename(getattr(file, 'name', 'upload'))
+        _, ext = os.path.splitext(original_name)
+        filename = f"{uuid4().hex}{ext.lower()}"
+        relative_path = os.path.join(base_dir, filename)
+
+        # Guardar usando el storage por defecto
+        saved_path = default_storage.save(relative_path, file)
+        file_url = default_storage.url(saved_path)
+
+        # Guardar URL absoluta en el campo url_foto
+        try:
+            absolute_url = request.build_absolute_uri(file_url)
+        except Exception:
+            absolute_url = file_url
+
+        registro.url_foto = absolute_url
+        registro.save(update_fields=['url_foto', 'updated_at'])
+
+        serializer = self.get_serializer(registro)
+        return ok_response(data=serializer.data, message='Imagen cargada correctamente')
+
     @action(detail=True, methods=['post'])
     def agregar_hashtag(self, request, pk=None):
-        """Agregar un hashtag a un registro"""
+        """Agregar un hashtag a un registro.
+        Si la relación ya existe, retorna la existente sin duplicar.
+        """
         registro = self.get_object()
         if not registro:
             raise NotFound()
@@ -246,12 +305,25 @@ class RegistroViewSet(viewsets.ModelViewSet):
             raise BadRequest({'error': 'id_catalogo_hashtag es requerido'})
 
         try:
+            # Verificar que el hashtag existe y está activo
+            from catalogos.models import CatalogoHashTag
+            try:
+                hashtag = CatalogoHashTag.objects.get(id=hashtag_id, activo=True)
+            except CatalogoHashTag.DoesNotExist:
+                raise BadRequest({'error': 'Hashtag no encontrado o inactivo'})
+
             hashtag_registro, created = HashTag_Registro.objects.get_or_create(
                 id_catalogo_hashtag_id=hashtag_id,
                 id_registro=registro
             )
             serializer = HashTagRegistroSerializer(hashtag_registro)
-            return created_response(data=serializer.data) if created else ok_response(data=serializer.data)
+            
+            if created:
+                return created_response(data=serializer.data, message='Hashtag agregado correctamente')
+            else:
+                return ok_response(data=serializer.data, message='El hashtag ya estaba asociado a este registro')
+        except BadRequest:
+            raise
         except Exception as e:
             raise BadRequest({'error': str(e)})
 
