@@ -11,7 +11,6 @@ class Expedientes(models.Model):
     usuarios_id = models.ForeignKey(User, on_delete=models.CASCADE, related_name='expedientes')
     asunto = models.CharField(max_length=255)
     fecha_evento = models.DateTimeField()
-    descripcion = models.TextField(null=True, blank=True)
     activo = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
