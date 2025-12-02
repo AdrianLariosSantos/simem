@@ -15,6 +15,7 @@ class ExpedientesListSerializer(serializers.ModelSerializer):
     usuario_nombre = serializers.CharField(source='usuarios_id.nombre_completo', read_only=True)
     registros_count = serializers.SerializerMethodField()
     created_at = serializers.DateTimeField(read_only=True)
+    fecha_evento = serializers.DateTimeField(format='%d/%m/%Y', read_only=True)
 
     class Meta:
         model = Expedientes
@@ -24,7 +25,7 @@ class ExpedientesListSerializer(serializers.ModelSerializer):
             'usuario_nombre',
             'asunto',
             'fecha_evento',
-            'descripcion',
+            'activo',
             'created_at',
             'updated_at',
             'registros_count'
@@ -40,6 +41,7 @@ class ExpedientesDetailSerializer(serializers.ModelSerializer):
     usuario_nombre = serializers.CharField(source='usuarios_id.nombre_completo', read_only=True)
     registros_count = serializers.SerializerMethodField()
     created_at = serializers.DateTimeField(read_only=True)
+    fecha_evento = serializers.DateTimeField(format='%d/%m/%Y', read_only=True)
 
     class Meta:
         model = Expedientes
@@ -49,9 +51,9 @@ class ExpedientesDetailSerializer(serializers.ModelSerializer):
             'usuario_nombre',
             'asunto',
             'fecha_evento',
-            'descripcion',
             'registros_count',
             'created_at',
+            'activo',
             'updated_at'
         ]
         read_only_fields = ['created_at', 'updated_at']
@@ -67,7 +69,8 @@ class ExpedientesCreateSerializer(serializers.ModelSerializer):
         fields = [
             'asunto',
             'fecha_evento',
-            'descripcion'
+            'activo',
+
         ]
 
     def create(self, validated_data):
